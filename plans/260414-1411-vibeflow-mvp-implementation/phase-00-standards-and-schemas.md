@@ -1,259 +1,193 @@
 ---
 phase: 0
-title: Standards + Schemas + MCP Spike
+title: Standards + Schemas
 status: pending
-effort: 1 week
+effort: 2 days
+depends_on: []
 ---
 
-# Phase 0: Standards + Schemas + MCP Spike
-
-## ⓘ Red Team Changes (Applied 2026-04-14)
-
-- **Finding #4 (Critical)**: Added MANDATORY MCP HTTP/SSE verification spike as §0 before schema work. If Claude Code doesn't support remote MCP transport in target version, entire architecture needs rework.
-- **Finding #2/Finding #5 (scope)**: Cut 4 templates (`service`, `library`, `web-app`, `cli`) → ship 1 generic `code` template. Drop `templates/product/.gitkeep`, `templates/design/.gitkeep` placeholder dirs (YAGNI).
-- **Finding (Assumption #8)**: `schema_version` uses `enum: ["1.0"]` instead of `const: "1.0"` to enable future evolution without retroactive breakage.
-
-## <!-- Updated: Validation Session 1 — embedded templates + 1 starter agent -->
-
-- **Validation #6**: NO separate `meta-template/` repo. All standards + schemas + template files live in `cli/templates/` and `cli/schemas/`, embedded via `go:embed` at compile time. Phase 0 deliverable is a directory structure inside the CLI repo, NOT a standalone git repo.
-- **Validation #7**: Ship ONE starter agent: `standards/agents/code-reviewer/agent.md` + manifest. Proves the agent distribution pipeline works. User adds more via `.claude/local/`.
-- **Validation #1**: Phase 0 MCP spike targets **latest Claude Code (1.x)** specifically. Document version tested. Fallback plan: if HTTP/SSE not supported, build local stdio proxy process in Phase 1.
-- **Effort**: 1w → **3-5 days** (embedded templates = no separate repo setup; 1 agent = minimal content work).
-
-## 0. MCP Transport Spike (MUST RUN FIRST)
-
-**Goal**: Prove Claude Code (target version) can connect to `@modelcontextprotocol/sdk` HTTP/SSE server and invoke a tool. If stdio-only, redesign Phase 2 around local CLI-spawned proxy.
-
-**Steps**:
-1. Stand up minimal Node server with `@modelcontextprotocol/sdk` + HTTP/SSE transport + 1 dummy tool
-2. Configure local Claude Code `~/.claude/settings.json` to point at it
-3. Invoke tool from Claude Code session, verify response
-4. Document: target Claude Code version, supported transport, any proxy required
-5. **If spike fails**: pause plan, revisit Phase 2 design (local stdio proxy process vs remote HTTP)
-
-**Owner**: tech lead.
-**Duration**: 1 day.
-**Blocker**: YES — do not start Phase 1 until this spike passes.
-
----
+# Phase 0: Standards + Schemas
 
 ## Context Links
 
-- Brainstorm §4.3 Meta-repo structure
-- Brainstorm §12 PRD/spec templates
-- Brainstorm §16.4 Meta-repo scaffold
-- Brainstorm §17.12 teams.yaml schema
+- Spec: [../../docs/specs/spec-standards.md](../../docs/specs/spec-standards.md) — authoritative contract
+- PRD: [../../docs/PRD-vibeflow-mvp.md](../../docs/PRD-vibeflow-mvp.md)
 
 ## Overview
 
-**Priority**: P0 blocker for all subsequent phases.
+**Priority**: P0 blocker for Phase 1 + 2.
 **Status**: pending
-**Description**: Define all machine contracts (JSON schemas), templates (PRD/spec/repo templates), meta-repo skeleton, and kind-namespaced template layout. Pure documentation work — no code, no infra.
+**Description**: Write 4 JSON schemas + 2 markdown templates directly into `cli/schemas/` and `cli/templates/` directories of the Vibeflow monorepo. These files will be embedded into the Go CLI binary via `go:embed` in Phase 1. Pure content work — no Go code, no infra, no external repo.
 
 ## Key Insights
 
-- Standards are the machine contracts Go CLI + Node server both validate against → single source of truth = JSON Schema files.
-- Kind namespacing (`templates/code/`, `templates/product/`, `templates/design/`) enables Phase 5 extension without schema breakage.
-- Required sections enforced by lint, not by freeform markdown parsing — schema-driven.
-- Progressive enforcement: schemas support `advisory → block_new → block_edit → ci_gate` modes.
+- Standards live **inside the CLI project**, not in a separate `meta-template/` repo. Embedded via `go:embed` at compile time.
+- Schema version uses `enum: ["1.0"]` (NOT `const: "1.0"`) — allows future minor bumps without breaking old files.
+- `kind` field exists in schema but only allows `"code"` in MVP — preserves Phase 5+ extension path.
+- No progressive enforcement modes in MVP — lint is advisory, user decides when to install as pre-commit hook.
 
 ## Requirements
 
 **Functional**:
-- Meta-repo skeleton scaffoldable via `git init` + file copy (no CLI needed yet)
-- JSON Schema files for: kanban, epic frontmatter, PRD frontmatter, spec frontmatter, teams.yaml, task frontmatter
-- PRD + spec markdown templates with required sections defined
-- Code project templates (`service`, `library`, `web-app`, `cli`) with template manifests
-- Standards/schemas versioned (`schema_version: "1.0"`)
-- Workspace config file schema (`.vibeflow/config.yaml`)
-- Kanban stages defined per kind (`kanban-stages.yaml`)
+- 4 JSON schemas (Draft-07):
+  - `prd-frontmatter.schema.json`
+  - `spec-frontmatter.schema.json`
+  - `vibeflow-yaml.schema.json`
+  - `teams-yaml.schema.json`
+- 2 markdown templates with required sections:
+  - `prd-template.md` (Problem, Users, Success Metrics table, Scope, Non-Goals)
+  - `spec-template.md` (Overview, API Contracts, Data Models, Edge Cases)
+- 1 project template directory: `templates/code/default/` with scaffold files
+- Fixture sets for testing (valid + invalid samples per schema)
 
 **Non-functional**:
-- All schemas Draft-07 JSON Schema compliant
-- Templates pure markdown + Go template syntax only (no framework lock-in)
-- Backward-compat path documented (schema_version bumps)
+- All schemas validate with `ajv` or Go `github.com/santhosh-tekuri/jsonschema/v5`
+- All templates parseable Go `text/template` syntax
+- Fixture tests runnable via `go test` in Phase 1
 
 ## Architecture
 
+**Location** (inside Vibeflow monorepo, created in Phase 1 but scaffolded here):
 ```
-meta-template/                           ← new git repo (ships as starter)
-├── .vibeflow/
-│   ├── config.yaml                      (workspace config)
-│   └── schema-version                   ("1.0")
-├── standards/
-│   ├── prd-template.md                  (required sections, frontmatter docs)
-│   ├── spec-template.md
-│   ├── epic-template.md
-│   ├── task-template.yaml               (YAML, not markdown)
-│   ├── review-checklist.md
-│   ├── kanban-stages.yaml               (stages per kind)
-│   ├── schemas/
-│   │   ├── kanban.schema.json
-│   │   ├── prd-frontmatter.schema.json
-│   │   ├── spec-frontmatter.schema.json
-│   │   ├── epic-frontmatter.schema.json
-│   │   ├── task-frontmatter.schema.json
-│   │   ├── teams.schema.json
-│   │   ├── workspace-config.schema.json
-│   │   ├── repo-vibeflow-yaml.schema.json
-│   │   ├── agent-manifest.schema.json
-│   │   └── skill-manifest.schema.json
-│   ├── templates/
-│   │   ├── code/
-│   │   │   ├── service/
-│   │   │   │   ├── template.yaml
-│   │   │   │   ├── .claude/CLAUDE.md.tmpl
-│   │   │   │   ├── docs/PRD.md.tmpl
-│   │   │   │   ├── docs/specs/.gitkeep
-│   │   │   │   ├── docs/adr/.gitkeep
-│   │   │   │   ├── docs/wiki/.gitkeep
-│   │   │   │   ├── plans/.gitkeep
-│   │   │   │   ├── plans/tasks/.gitkeep
-│   │   │   │   ├── .vibeflow.yaml.tmpl
-│   │   │   │   ├── .gitignore.tmpl
-│   │   │   │   ├── .gitattributes
-│   │   │   │   └── README.md.tmpl
-│   │   │   ├── library/
-│   │   │   ├── web-app/
-│   │   │   └── cli/
-│   │   ├── product/.gitkeep             (Phase 5+ placeholder)
-│   │   └── design/.gitkeep              (Phase 5+ placeholder)
-│   └── agents/                          (starter agents, Phase 1 ships them)
-│       └── .gitkeep
-├── epics/
-│   └── .gitkeep
-├── wiki/
-│   ├── architecture/README.md
-│   ├── decisions/README.md
-│   └── glossary.md
-├── plugins/
-│   └── .gitkeep
-├── teams.yaml                           (empty skeleton)
-├── README.md
-└── .gitignore
+cli/
+├── schemas/                              (created in this phase)
+│   ├── prd-frontmatter.schema.json
+│   ├── spec-frontmatter.schema.json
+│   ├── vibeflow-yaml.schema.json
+│   ├── teams-yaml.schema.json
+│   └── fixtures/
+│       ├── valid/
+│       │   ├── prd-minimal.md
+│       │   ├── prd-full.md
+│       │   ├── spec-minimal.md
+│       │   ├── vibeflow-yaml-minimal.yaml
+│       │   └── teams-yaml-minimal.yaml
+│       └── invalid/
+│           ├── prd-missing-required.md
+│           ├── prd-bad-status.md
+│           ├── prd-wrong-quarter.md
+│           ├── spec-bad-prd-ref.md
+│           └── teams-yaml-bad-team-slug.yaml
+└── templates/                            (created in this phase)
+    └── code/
+        └── default/
+            ├── template.yaml             (manifest, minimal)
+            ├── .claude/CLAUDE.md.tmpl
+            ├── docs/PRD.md.tmpl
+            ├── docs/specs/.gitkeep
+            ├── docs/wiki/.gitkeep
+            ├── plans/.gitkeep
+            ├── .vibeflow.yaml.tmpl
+            ├── .gitignore.tmpl
+            └── README.md.tmpl
 ```
+
+Total files created: ~20.
 
 ## Related Files
 
-**Create** (all in `meta-template/` repo):
-- Schema files (10) in `standards/schemas/`
-- Template files (4 code templates × ~14 files each = ~56 files)
-- Standards docs (~7 files)
-- Wiki starter files (3 files)
-- Root files (teams.yaml, README, .gitignore, config.yaml)
+**Create** (all in Vibeflow monorepo):
+- 4 JSON schemas in `cli/schemas/`
+- ~10 fixture files in `cli/schemas/fixtures/`
+- 1 template manifest + ~8 template files in `cli/templates/code/default/`
+- 2 canonical markdown template reference docs (copied to `docs/templates/prd-template.md` and `docs/templates/spec-template.md` as human-readable refs)
 
-**Reference** (brainstorm sections):
-- §4.3, §4.4 (meta-repo + product repo structure)
-- §12.3 (PRD schema), §12.5 (metrics schema), §12.7 (spec schema)
-- §17.12 (teams.yaml full schema)
-- §13.7 (template manifest)
-- §18.4 (agent manifest)
+**Reference** (already written as source of truth):
+- `docs/specs/spec-standards.md` — full schema definitions and lint rules
 
 ## Implementation Steps
 
-1. **Create `meta-template` repo** (separate git repo, ships as starter)
-   - `git init meta-template && cd meta-template`
-   - Root `.gitignore`, `README.md` explaining what this template is
-   - Initial `.vibeflow/config.yaml` with schema_version
+1. **Scaffold Vibeflow monorepo** (if not done):
+   - Create `cli/` directory
+   - Create `cli/schemas/`, `cli/templates/code/default/`
+   - Add `.gitignore` entries for Go artifacts
 
-2. **Write JSON schemas** (10 files):
-   - `kanban.schema.json` — kanban.yaml structure (index of tasks)
-   - `task-frontmatter.schema.json` — per-task YAML schema
-   - `epic-frontmatter.schema.json` — epic markdown frontmatter
-   - `prd-frontmatter.schema.json` — PRD frontmatter (from brainstorm §12.3)
-   - `spec-frontmatter.schema.json` — spec frontmatter (from §12.7)
-   - `teams.schema.json` — teams.yaml full (from §17.12)
-   - `workspace-config.schema.json` — `.vibeflow/config.yaml`
-   - `repo-vibeflow-yaml.schema.json` — product repo `.vibeflow.yaml`
-   - `agent-manifest.schema.json` — from §18.4
-   - `skill-manifest.schema.json` — from §18.4
-   - Each MUST include `$schema: http://json-schema.org/draft-07/schema#`
-   - ⓘ **Red team (Assumption #8)**: Use `enum: ["1.0"]` on `schema_version` (NOT `const: "1.0"`) — allows future evolution without retroactive breakage of existing files
+2. **Write 4 JSON schemas** — copy exactly from `docs/specs/spec-standards.md`:
+   - `prd-frontmatter.schema.json`
+   - `spec-frontmatter.schema.json`
+   - `vibeflow-yaml.schema.json`
+   - `teams-yaml.schema.json`
+   - Each with `$schema: http://json-schema.org/draft-07/schema#`
+   - Each with `schema_version` as `enum: ["1.0"]`
+   - Strict `additionalProperties: false`
 
-3. **Write markdown templates** (standards/):
-   - `prd-template.md` with required sections (§12.2 content) + frontmatter docs in comments
-   - `spec-template.md` (§12.6)
-   - `epic-template.md`
-   - `review-checklist.md`
-   - `kanban-stages.yaml` — define stages for `code`/`product`/`design` (even if only code used in MVP)
+3. **Write fixture sets**:
+   - For each schema, create minimal valid sample + maximal valid sample
+   - For each schema, create 2-3 invalid samples covering: missing required, wrong type, wrong enum, bad regex
+   - Commit in `cli/schemas/fixtures/valid/` and `invalid/`
 
-4. **Write ONE generic code project template** (`standards/templates/code/default/`):
-   - ⓘ **Red team #2/#5**: was 4 templates (service/library/web-app/cli), cut to 1. `--tech-stack` flag drives README.md content differences.
-   - Has `template.yaml` manifest
-   - Has `.claude/CLAUDE.md.tmpl`, `docs/PRD.md.tmpl`, `.vibeflow.yaml.tmpl`, `.gitignore.tmpl`, `README.md.tmpl`
-   - Go template variables: `{{ .project_name }}`, `{{ .kind }}`, `{{ .team }}`, `{{ .epic }}`, `{{ .tech_stack }}`, `{{ .owner }}`, `{{ .workspace_path }}`, `{{ .date }}`, `{{ .quarter }}`
-   - ⓘ **Security**: strict regex `^[a-zA-Z0-9_-]{1,64}$` on `project_name`, `team`, `owner` at CLI flag parse time (defense against template injection)
+4. **Write PRD markdown template**:
+   - `cli/templates/code/default/docs/PRD.md.tmpl`
+   - Required sections: Problem, Users, Success Metrics, Scope, Non-Goals
+   - Go template vars: `{{ .project_name }}`, `{{ .team }}`, `{{ .owner }}`, `{{ .date }}`, `{{ .description }}`
+   - Include example Success Metrics table skeleton
 
-5. **Write workspace skeleton** (teams.yaml, wiki starters):
-   - `teams.yaml` — empty skeleton with schema_version + comments pointing to docs
-   - `wiki/architecture/README.md` — "Put architecture docs here"
-   - `wiki/decisions/README.md` — "Put ADRs here"
-   - `wiki/glossary.md` — empty
+5. **Write spec markdown template** (canonical reference, not in init scaffolding):
+   - `docs/templates/spec-template.md` — human-readable reference
+   - Required sections: Overview, API Contracts, Data Models, Edge Cases
 
-6. **Validate all schemas**:
-   - Use `ajv` CLI or Go `github.com/santhosh-tekuri/jsonschema` to validate schemas compile
-   - Cross-test: create sample valid + invalid YAML for each schema, confirm validation works
-   - Commit test fixtures in `standards/schemas/tests/`
+6. **Write code project template files**:
+   - `template.yaml` manifest — minimal metadata
+   - `.claude/CLAUDE.md.tmpl` — project instructions with MCP tool usage hint
+   - `.vibeflow.yaml.tmpl` — conforms to vibeflow-yaml.schema.json
+   - `.gitignore.tmpl` — standard ignores + `.env*`, `*.pem`, `token.json`, `secrets/`
+   - `README.md.tmpl` — quick-start stub
+   - `.gitkeep` files for empty dirs
 
-7. **Document progressive enforcement modes** (§12.9):
-   - Add section to `standards/README.md` explaining `advisory → block_new → block_edit → ci_gate`
-   - Config in `.vibeflow/config.yaml`
+7. **Validate**:
+   - Manually run `ajv validate -s <schema> -d <fixture>` for each schema+fixture pair
+   - Render template via `gomplate` or manual Go text/template eval to verify syntax
 
-8. **Commit and tag**:
-   - `git tag standards-v1.0`
-   - This repo will be consumed by CLI `vibeflow workspace init`
+8. **Write canonical reference copies** in `docs/templates/`:
+   - `docs/templates/prd-template.md` (plain, for users to read)
+   - `docs/templates/spec-template.md`
 
 ## Todo List
 
-- [ ] Create `meta-template/` repo
-- [ ] Write 10 JSON schemas in `standards/schemas/`
-- [ ] Write PRD template with required sections
-- [ ] Write spec template with required sections
-- [ ] Write epic template
-- [ ] Write review checklist
-- [ ] Write kanban-stages.yaml (3 kinds)
-- [ ] Scaffold `templates/code/service/` (14 files)
-- [ ] Scaffold `templates/code/library/` (12 files)
-- [ ] Scaffold `templates/code/web-app/` (13 files)
-- [ ] Scaffold `templates/code/cli/` (12 files)
-- [ ] Write each template's `template.yaml` manifest
-- [ ] Write teams.yaml skeleton
-- [ ] Write wiki starter files
-- [ ] Write workspace config schema + sample
-- [ ] Validate all schemas compile (ajv or Go lib)
-- [ ] Create test fixtures (valid/invalid samples per schema)
-- [ ] Document progressive enforcement modes
-- [ ] Tag `standards-v1.0`
+- [ ] Scaffold `cli/schemas/` directory
+- [ ] Scaffold `cli/templates/code/default/` directory
+- [ ] Write `prd-frontmatter.schema.json`
+- [ ] Write `spec-frontmatter.schema.json`
+- [ ] Write `vibeflow-yaml.schema.json`
+- [ ] Write `teams-yaml.schema.json`
+- [ ] Write 10+ valid fixture files
+- [ ] Write 8+ invalid fixture files
+- [ ] Write `PRD.md.tmpl` (Go template)
+- [ ] Write `CLAUDE.md.tmpl`
+- [ ] Write `.vibeflow.yaml.tmpl`
+- [ ] Write `.gitignore.tmpl`, `README.md.tmpl`
+- [ ] Write `template.yaml` manifest
+- [ ] Create `.gitkeep` for empty dirs (specs/, wiki/, plans/)
+- [ ] Write canonical `docs/templates/prd-template.md`
+- [ ] Write canonical `docs/templates/spec-template.md`
+- [ ] Validate all schemas against fixtures (manual ajv or Go test prep)
 
 ## Success Criteria
 
-- All 10 JSON schemas validate without errors
-- Sample PRD passes `prd-frontmatter.schema.json` validation
-- Sample invalid PRD fails with clear error messages
-- `templates/code/service/` can be manually rendered with mock variables (Go text/template or cookiecutter)
-- Meta-template repo cloneable and readable
-- Schema test fixtures pass in CI (even if CI is just a Makefile locally for now)
-- Brainstorm §12, §17.12, §18.4 specs match what's in `standards/schemas/`
+- `ajv validate -s cli/schemas/prd-frontmatter.schema.json -d cli/schemas/fixtures/valid/prd-minimal.md` passes
+- Each invalid fixture fails validation with clear error
+- PRD template renders without Go template errors using sample variables
+- This MVP PRD (`docs/PRD-vibeflow-mvp.md`) passes validation against the schema (dogfood check)
+- All files committed and ready for Phase 1 to `go:embed`
 
 ## Risks
 
 | Risk | Mitigation |
 |---|---|
-| Schema design flaws block Phase 1 | Validate with real example PRDs before freezing |
-| Templates too rigid for real projects | Leave optional sections liberal, enforce only essentials |
-| Go template syntax conflicts with markdown (e.g. `{{` inside prose) | Use `{{/* */}}` escape sequences, document |
-| Missed required field → retroactive migration painful | Over-require initially, easier to relax than tighten |
-| kind namespacing unused for MVP (code only) | Keep placeholder dirs anyway — costs nothing |
+| Schema design mistakes found late | Dogfood immediately: validate this plan's own PRD first |
+| Template syntax conflicts with markdown `{{` | Use `{{/* */}}` escape, document in template |
+| Required fields too strict → real PRDs fail | Under-require initially, tighten post-MVP |
+| `enum: ["1.0"]` vs `const: "1.0"` confusion | Document in spec-standards.md why enum (red team finding) |
 
 ## Security Considerations
 
-- No secrets in templates (no API keys, no credentials)
-- `.gitignore.tmpl` excludes `.env`, `*.pem`, `token.json`, `secrets/`
-- Schemas explicitly mark sensitive fields (e.g., `teams.yaml` members are PII)
-- Document that meta-template is public/shareable (no org-specific data)
+- No secrets in any template file
+- `.gitignore.tmpl` excludes `.env*`, `*.pem`, `token.json`, `secrets/`
+- Schemas validate but do NOT execute user input
+- Template vars quoted in YAML contexts to prevent injection
 
 ## Next Steps
 
-- Phase 1 (Go CLI) consumes these templates as embedded resources or filesystem references
-- CLI validates files against these schemas
-- Server (Phase 2) parses YAML/markdown using same schemas
+- Phase 1 `go:embed`s these files into the CLI binary
+- Phase 1 validates against these schemas at `lint` time
+- Phase 2 MCP server reuses schema validator for `workspace_context` responses

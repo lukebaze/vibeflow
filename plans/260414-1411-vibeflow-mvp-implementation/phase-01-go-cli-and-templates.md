@@ -1,352 +1,270 @@
 ---
 phase: 1
-title: Go CLI (4 commands)
+title: Go CLI (3 commands)
 status: pending
-effort: 1-1.5 weeks
+effort: 4 days
 depends_on: [phase-00]
 ---
 
-# Phase 1: Go CLI (4 commands)
-
-## ⓘ Red Team Changes (Applied 2026-04-14)
-
-**Finding #2 (Critical)**: Massive scope cut. Was 12+ command groups; MVP ships only 4 essentials.
-
-**KEEP (MVP)**:
-- `vibeflow init <name>` — scaffold new repo
-- `vibeflow link` — adopt existing repo into workspace
-- `vibeflow lint [path]` — validate PRD/spec/kanban against schemas
-- `vibeflow claude setup` — register MCP server in `~/.claude/settings.json`
-- `vibeflow version`, `vibeflow help` (trivial cobra defaults)
-
-**CUT (defer to post-MVP)**:
-- `vibeflow workspace init` → manual: clone meta-template, edit teams.yaml (document in README)
-- `vibeflow doctor` (nice-to-have)
-- `vibeflow config get/set/list` (use env vars + `.vibeflow.yaml` directly)
-- `vibeflow agents list/status/pin/unpin/exclude/sync` — keep only `agents sync` (simple file copy from local meta-repo clone); drop CRUD on pins
-- `vibeflow login/logout/whoami` stub (Phase 4 adds real OIDC)
-- `vibeflow completion <shell>` (polish)
-- `--json` on every command → keep only on `lint` (for CI integration)
-- Fuzzy-match typo suggestions (polish)
-- Lipgloss styling + go-pretty tables → plain stderr + simple alignment
-- Interactive prompts — pure flags first (remove survey lib dependency)
-- Dry-run on every destructive command → only on `init` (which has side effects)
-
-**Effort**: 2-3w → 1-1.5w (halved via scope cut).
-
-## <!-- Updated: Validation Session 1 — manual sync + embedded templates -->
-
-**5th MVP command added** (from validation):
-- `vibeflow sync [repo]` — triggers server resync via `POST /admin/sync/:repo` API call. Replaces the polling daemon entirely. Users run manually after pushing to meta-repo or product repo. Optional: install as git post-commit hook.
-
-**Templates embedded in CLI via `go:embed`** (validation #6):
-- No separate `meta-template/` repo dependency
-- `cli/templates/` + `cli/schemas/` + `cli/agents/` (1 starter) + `cli/workspace-skeleton/` (for `vibeflow workspace init`, if kept) all compiled into single binary
-- `vibeflow init` extracts from binary
-- CLI release = template release (versioned together)
-
-**`vibeflow workspace init` RE-ADDED to MVP** (validation #6 dep):
-- Was cut by red team, but with embedded templates it's trivial: scaffold workspace skeleton from `cli/workspace-skeleton/` into new directory
-- No GitHub API calls in MVP version — user creates GitHub repo manually, then runs `vibeflow workspace init` locally + `git push`
-- Removes manual `clone meta-template && edit teams.yaml` step entirely
-
-**Final MVP CLI surface** (5 commands):
-- `vibeflow init <name>`
-- `vibeflow link`
-- `vibeflow lint [path]`
-- `vibeflow sync [repo]` ← NEW from validation
-- `vibeflow claude setup`
-- `vibeflow workspace init <name>` ← RE-ADDED from validation
-- Plus `vibeflow version`, `vibeflow help`
-
-**Effort**: 1-1.5w → **1w** (embedded templates simplify scaffolding; manual sync adds ~0.5d of CLI work but offsets against drop of daemon).
-
-## Remaining Content (updated to reflect cuts)
----
+# Phase 1: Go CLI (3 commands)
 
 ## Context Links
 
-- Brainstorm §13 CLI command surface
-- Brainstorm §13.7 Template rendering
-- Brainstorm §16.4 Meta-repo init flow
-- Brainstorm §16.7 Repo link/adopt flow
-- Phase 0: standards + schemas (consumed here)
+- Spec: [../../docs/specs/spec-cli.md](../../docs/specs/spec-cli.md) — authoritative contract
+- PRD: [../../docs/PRD-vibeflow-mvp.md](../../docs/PRD-vibeflow-mvp.md)
+- Phase 0: schemas + templates (embedded here)
 
 ## Overview
 
-**Priority**: P0, first user-facing deliverable.
+**Priority**: P0 — first user-facing deliverable.
 **Status**: pending
-**Description**: Go CLI binary (`vibeflow`) providing scaffolding, linting, workspace init, repo link, and agent sync. Ships templates from Phase 0 embedded in binary. Works offline — no server dependency.
+**Description**: Single static Go binary `vibeflow` providing `init`, `link`, `lint` commands plus `claude setup` helper. Embeds Phase 0 schemas + templates via `go:embed`. Zero runtime dependencies except `git` (for init post-hook). Cross-compiles to 5 platforms.
 
 ## Key Insights
 
-- Go chosen for single static binary (§13.13 distribution). Zero install friction for devs.
-- Templates embedded via `go:embed` directive → binary self-contained.
-- CLI works offline for all local ops (init, lint, template render). Server only needed for MCP integration (set up via `claude setup`).
-- Schema validation uses Go JSON Schema lib (`github.com/santhosh-tekuri/jsonschema/v5`).
-- ⓘ **Red team**: No auth in Phase 1 at all (cut stub). Phase 4 adds real OIDC directly.
-- Command pattern `vibeflow <noun> <verb>` for future extension.
-- ⓘ **Security (merged finding)**: Template variable escaping — strict regex validation at CLI flag parse, no user input in shell commands (use `git commit -F` with stdin not inline).
+- Single binary distribution is the user-facing killer feature (zero install friction)
+- All schemas + templates embedded at compile time — no network fetch, no external repo dependency
+- Stub commands only where PRD explicitly includes them: `init`, `link`, `lint`, `claude setup`, `version`, `help`. No `doctor`, no `config`, no `agents`, no `workspace init`, no stub auth.
+- Schema validator shared with Phase 2 MCP server via internal package
+- Deliberately terse error messages + hints (per CLI spec §11)
 
 ## Requirements
 
 **Functional**:
-- `vibeflow init <name>` — scaffold repo with `--kind code` (MVP), template selection, team, epic
-- `vibeflow workspace init <name>` — scaffold meta-repo from embedded skeleton
-- `vibeflow link` — adopt existing repo into workspace
-- `vibeflow lint [path]` — validate PRD, spec, task, kanban against schemas
-- `vibeflow config get/set/list` — manage `~/.config/vibeflow/config.yaml`
-- `vibeflow agents sync` — pull latest agents from meta-repo (local git ops only, no server)
-- `vibeflow agents status/list/pin/unpin/exclude` — manage `.vibeflow.yaml` agent pins
-- `vibeflow doctor` — health check (git, config, workspace detection)
-- `vibeflow claude setup` — register MCP server in `~/.claude/settings.json`
-- `vibeflow whoami/login/logout` — stub auth (real OIDC in Phase 4)
-- `vibeflow version`, `vibeflow help`, `vibeflow completion <shell>`
+- `vibeflow init <name> [flags]` — scaffold repo from embedded template
+- `vibeflow link [flags]` — register repo in workspace `teams.yaml`
+- `vibeflow lint [path] [flags]` — validate PRD/spec/.vibeflow.yaml against schemas
+- `vibeflow claude setup [flags]` — write MCP entry to `~/.claude/settings.json`
+- `vibeflow version`, `vibeflow help` — trivial cobra defaults
+- `--dry-run` on init and link
+- `--format` on lint (text | json | github-annotations)
+- Exit codes per spec (0, 1, 2, 3, 7)
 
 **Non-functional**:
-- <100ms startup (cold)
-- Single static binary, cross-compile macOS/Linux/Windows, arm64/amd64
-- Stable exit codes (§13.10)
-- `--json` output mode on every command
-- Clear error UX with hints + fuzzy matching (§13.11)
-- Dry-run support on destructive commands
+- Cold start < 100ms
+- `init` end-to-end < 2s including `git init`
+- Binary < 20 MB after strip
+- Cross-compile for darwin-arm64, darwin-amd64, linux-arm64, linux-amd64, windows-amd64
+- Pass CI tests on all 5 platforms
 
 ## Architecture
 
-**Monorepo structure** (Vibeflow project itself):
 ```
-vibeflow/                                ← main project repo
-├── cli/                                 ← Go CLI
+vibeflow/                              (monorepo root)
+├── cli/
+│   ├── main.go                        (entry, thin)
 │   ├── cmd/
-│   │   ├── root.go
+│   │   ├── root.go                    (cobra root, flags, version)
 │   │   ├── init.go
-│   │   ├── workspace.go
 │   │   ├── link.go
 │   │   ├── lint.go
-│   │   ├── config.go
-│   │   ├── agents.go
-│   │   ├── doctor.go
-│   │   ├── claude.go
-│   │   ├── auth.go
-│   │   └── version.go
+│   │   └── claude.go                  (claude setup subcommand)
 │   ├── internal/
-│   │   ├── config/          (config precedence, loading)
-│   │   ├── workspace/       (workspace detection, meta-repo ops)
-│   │   ├── template/        (Go template rendering, embedded fs)
-│   │   ├── schema/          (JSON schema validation)
-│   │   ├── lint/            (PRD/spec lint rules)
-│   │   ├── git/             (git ops via go-git or shellout)
-│   │   ├── auth/            (token storage, OIDC stub)
-│   │   ├── agents/          (agent pull, manifest, pins)
-│   │   ├── prompt/          (interactive prompts, survey lib)
-│   │   ├── output/          (text/json formatting, colors)
-│   │   └── errors/          (error codes, hints, fuzzy match)
-│   ├── templates/           ← embedded via go:embed
-│   │   └── (copy from meta-template/standards/templates/code/)
-│   ├── schemas/             ← embedded via go:embed
-│   │   └── (copy from meta-template/standards/schemas/)
+│   │   ├── config/
+│   │   │   ├── load.go                (env + flag precedence)
+│   │   │   └── types.go               (CliConfig struct)
+│   │   ├── workspace/
+│   │   │   ├── detect.go              (walk-up search for .vibeflow.yaml)
+│   │   │   ├── teams-yaml.go          (parse + update teams.yaml)
+│   │   │   └── repo.go                (read .vibeflow.yaml)
+│   │   ├── template/
+│   │   │   ├── render.go              (Go text/template with safe funcs)
+│   │   │   ├── walker.go              (walk embedded FS, render tree)
+│   │   │   └── funcs.go               (default, join, lower, date helpers)
+│   │   ├── schema/
+│   │   │   ├── validator.go           (jsonschema lib wrapper)
+│   │   │   └── loader.go              (load embedded schemas at startup)
+│   │   ├── lint/
+│   │   │   ├── engine.go              (run rules, collect diagnostics)
+│   │   │   ├── frontmatter.go         (parse YAML frontmatter)
+│   │   │   ├── sections.go            (heading tree extraction)
+│   │   │   ├── metrics-table.go       (table parser for Success Metrics)
+│   │   │   └── rules.go               (rule definitions)
+│   │   ├── gitops/
+│   │   │   └── shellout.go            (git init, add, commit via exec.Command)
+│   │   ├── errors/
+│   │   │   └── typed.go               (error types with hints + exit codes)
+│   │   └── output/
+│   │       ├── text.go                (colored, iconed)
+│   │       └── json.go                (stable schema)
+│   ├── schemas/                       (from Phase 0, go:embed)
+│   ├── templates/                     (from Phase 0, go:embed)
 │   ├── go.mod
 │   ├── go.sum
-│   └── main.go
-├── server/                              ← Phase 2+ (placeholder)
-├── meta-template/                       ← from Phase 0 (reference or submodule)
-└── README.md
+│   └── main_test.go
+└── .github/workflows/cli-release.yml  (goreleaser matrix build)
 ```
 
-**Key dependencies** (Go):
+**Dependencies** (minimal):
 - `github.com/spf13/cobra` — command framework
-- `github.com/spf13/viper` — config loading (precedence)
 - `github.com/santhosh-tekuri/jsonschema/v5` — JSON schema validation
-- `github.com/AlecAivazis/survey/v2` — interactive prompts
-- `github.com/go-git/go-git/v5` — git ops in Go (or shellout to `git` binary for simplicity)
-- `github.com/charmbracelet/lipgloss` — terminal styling
 - `gopkg.in/yaml.v3` — YAML parsing
-- `github.com/mitchellh/mapstructure` — config → struct
+- `github.com/goccy/go-yaml` — YAML edit-in-place preserving comments (for `link`)
+
+Standard library for everything else. No survey (use plain prompts if needed), no viper (env + flag precedence by hand), no lipgloss (ANSI escape codes directly).
 
 ## Related Files
 
 **Create**:
-- `cli/main.go` (entry)
-- `cli/cmd/*.go` (10+ command files)
-- `cli/internal/**/*.go` (~15 packages)
-- `cli/templates/` (embed dir, copied from Phase 0)
-- `cli/schemas/` (embed dir, copied from Phase 0)
+- `cli/main.go` + `cli/cmd/*.go` (5 files)
+- `cli/internal/**/*.go` (~15 files)
+- `cli/main_test.go` + integration tests (~5 files)
 - `cli/go.mod`, `go.sum`
-- `.github/workflows/cli-release.yml` (goreleaser cross-compile)
+- `.github/workflows/cli-release.yml` (goreleaser)
+- `.goreleaser.yml`
+- `cli/README.md`
 
-**Reference**:
-- `meta-template/` from Phase 0 (sync templates/schemas via CI)
+**Reference** (already exists):
+- `cli/schemas/*.json` (from Phase 0)
+- `cli/templates/code/default/*` (from Phase 0)
 
 ## Implementation Steps
 
-1. **Project scaffold**:
-   - `cd vibeflow && mkdir cli && cd cli`
-   - `go mod init github.com/company/vibeflow/cli`
-   - Set up `main.go` with `cobra` root command
-   - Embed templates + schemas via `go:embed`
+1. **Bootstrap Go module**:
+   - `cd cli && go mod init github.com/lukebaze/vibeflow/cli`
+   - Add minimal deps (cobra, jsonschema, yaml.v3, go-yaml)
+   - Setup `main.go` with cobra root command + version
 
-2. **Config system** (`internal/config/`):
-   - Precedence: flag > env > project `.vibeflow.yaml` > user `~/.config/vibeflow/config.yaml` > system > baked default
-   - Use viper with custom precedence chain
-   - Schema-validated against `workspace-config.schema.json`
+2. **Embed assets**:
+   - Add `//go:embed schemas/*.json` and `//go:embed templates/code/default/**/*` directives
+   - Test: `go build` succeeds and binary includes files
 
-3. **Workspace detection** (`internal/workspace/`):
-   - Walk up from CWD looking for meta-repo marker (`.vibeflow/config.yaml`)
-   - Read teams.yaml to get team/repo list
-   - Expose API: `Detect()`, `GetMeta()`, `GetTeams()`, `GetRepos()`
+3. **Schema validator wrapper**:
+   - `internal/schema/loader.go` — parse all embedded schemas at startup
+   - `internal/schema/validator.go` — `Validate(schemaName, data)` returns typed errors
+   - Unit test against Phase 0 fixtures (valid + invalid)
 
-4. **Template rendering engine** (`internal/template/`):
-   - Use `text/template` stdlib
-   - Load from embedded FS
-   - Variable substitution with custom funcs (`default`, `join`, `lower`, etc.)
-   - Conditional file inclusion (e.g., `_skip_if_no_db/` dirs)
-   - Post-render hooks (git init, git commit)
+4. **Workspace detection**:
+   - `internal/workspace/detect.go` — walk up from cwd looking for `.vibeflow.yaml`
+   - `internal/workspace/teams-yaml.go` — read/write preserving comments via go-yaml
 
-5. **Schema validation** (`internal/schema/`):
-   - Load all schemas from embedded FS on startup
-   - `Validate(schemaName, data)` returns structured errors with line numbers
-   - Used by lint and template rendering sanity checks
+5. **Template renderer**:
+   - `internal/template/render.go` — Go text/template with safe funcs
+   - `internal/template/walker.go` — walk embedded FS, render `.tmpl` files, copy others
+   - Strict regex on template vars at input stage (defense against injection)
 
-6. **Lint engine** (`internal/lint/`):
-   - Parse markdown frontmatter (YAML) + body sections
-   - Extract heading structure for required-section check
-   - Parse tables under known headings (Success Metrics)
-   - Run rules from brainstorm §12.8
-   - Severity levels: error/warn/info
-   - Output formats: text (default), json, github-annotations (for CI)
+6. **Lint engine**:
+   - `internal/lint/frontmatter.go` — parse YAML frontmatter between `---` delimiters
+   - `internal/lint/sections.go` — walk markdown headings, build section tree
+   - `internal/lint/metrics-table.go` — parse pipe-syntax tables under `## Success Metrics`
+   - `internal/lint/rules.go` — define all rules from spec-standards.md §Lint rules
+   - `internal/lint/engine.go` — run all rules, return sorted diagnostics
 
-7. **Init command** (`cmd/init.go`):
-   - Flags: `--kind`, `--template`, `--team`, `--epic`, `--tech-stack`, `--description`, `--no-git`, `--no-workspace-pr`, `--yes`, `--dry-run`, `--json`
-   - Interactive prompts via survey lib if missing flags (unless `--yes`)
-   - Template selection from embedded `templates/code/`
-   - Render files to target dir
-   - Run post-render hooks (git init, commit)
-   - Update meta-repo teams.yaml + push PR (optional)
-   - Brainstorm §13.3 flow exactly
+7. **`init` command**:
+   - Parse flags (`name`, `--team`, `--description`, `--yes`, `--dry-run`)
+   - Validate name regex `^[a-z0-9-]{1,64}$`
+   - Check target dir doesn't exist
+   - Walk embedded template tree, render each file with vars
+   - Run `git init && git add -A && git commit -m "..."` via shellout
+   - Print success + next-steps hint
 
-8. **Workspace init** (`cmd/workspace.go`):
-   - `vibeflow workspace init <name>` scaffolds meta-repo from embedded skeleton
-   - Prompts: department name, GitHub org, repo name, initial teams
-   - Creates GitHub repo via API (requires PAT/token)
-   - Scaffolds files from embedded `meta-template/` copy
-   - Commits + pushes
-   - Brainstorm §16.4 flow
+8. **`link` command**:
+   - Detect workspace from `VIBEFLOW_WORKSPACE` or `--workspace` flag
+   - Read repo's `.vibeflow.yaml` (error if missing)
+   - Read workspace's `teams.yaml` (error if missing or malformed)
+   - Append repo name to `teams[team].repos` (create team if missing)
+   - Write back preserving comments
+   - Print reminder: "commit workspace changes manually"
 
-9. **Link command** (`cmd/link.go`):
-   - Adopt existing repo: detect workspace, create `.vibeflow.yaml`, migrate old docs if found
-   - `--migrate` flag attempts PRD format migration (best-effort, user reviews)
-   - Commit as "feat: adopt vibeflow workspace structure"
-   - PR to meta-repo teams.yaml (optional via `--no-workspace-pr`)
+9. **`lint` command**:
+   - Default path: current working dir, find `docs/PRD.md`, `docs/specs/*.md`, `.vibeflow.yaml`
+   - Explicit path: single file
+   - Run lint engine, print diagnostics
+   - Exit 7 on any error, 0 on pass
+   - `--format json` outputs stable schema
+   - `--format github-annotations` outputs `::error::` lines for GitHub Actions
 
-10. **Lint command** (`cmd/lint.go`):
-    - Default: lint all files in current project (`docs/PRD.md`, `docs/specs/*.md`, `plans/tasks/*.yaml`)
-    - Path arg: lint specific file
-    - `--fix` flag auto-fixes trivial issues (missing `schema_version`, sort frontmatter)
-    - `--format github-annotations` for CI output
-    - Exit code 7 on validation error
+10. **`claude setup` command**:
+    - Read `~/.claude/settings.json` (create if missing)
+    - Parse JSON preserving other entries
+    - Add/update `mcpServers.vibeflow` entry with:
+      - `command`: path to `vibeflow-mcp` binary (Phase 2, if separate) OR `command: "vibeflow", args: ["mcp-server"]`
+      - `env: { VIBEFLOW_WORKSPACE: <current env value or prompt> }`
+    - Write back with 2-space indent
+    - Print reminder: "restart Claude Code to activate"
 
-11. **Agents commands** (`cmd/agents.go`):
-    - `list` — from meta-repo/standards/agents/ manifest
-    - `status` — read `.claude/.managed-manifest.yaml` vs current meta-repo state
-    - `sync` — copy latest agent files from local meta-repo clone, update manifest
-    - `pin/unpin/exclude` — edit `.vibeflow.yaml`
-    - No server involvement (git-based only, assumes meta-repo accessible locally)
+11. **Output system**:
+    - Text mode with ANSI colors (`\033[...]`) gated on `isatty`
+    - JSON mode stable schema
+    - Typed errors with hints
 
-12. **Doctor command** (`cmd/doctor.go`):
-    - Check: git version, workspace detected, config valid, schema-validate `.vibeflow.yaml`, token present (stub auth), MCP registered
-    - Warning on stale wiki cache (>N days)
-    - `--fix` flag to auto-fix trivial issues
+12. **Testing**:
+    - Unit: schema validator, lint engine, template renderer, frontmatter parser
+    - Integration: end-to-end `init` → `link` → `lint` on temp dir
+    - Integration: `claude setup` with existing + missing settings.json
+    - CI matrix: 5 platforms
 
-13. **Claude setup** (`cmd/claude.go`):
-    - Read/write `~/.claude/settings.json`
-    - Add/update `mcpServers.vibeflow` entry pointing to configured server URL
-    - Handle missing file gracefully
-    - Idempotent
+13. **Release pipeline**:
+    - `.goreleaser.yml` with matrix build
+    - `.github/workflows/cli-release.yml` triggers on git tag
+    - Artifacts uploaded to GitHub Releases
+    - Checksum file (sha256)
+    - Homebrew tap update (optional, v0.1.0 can be manual)
 
-14. **Auth stub** (`cmd/auth.go` + `internal/auth/`):
-    - `login` — stub: accepts email, generates fake token, saves to `~/.config/vibeflow/token.json` (mode 600)
-    - `whoami` — reads token file, shows email
-    - `logout` — deletes token file
-    - Document that real OIDC arrives in Phase 4
-    - Structure code so OIDC swap is a single package change
-
-15. **Output system** (`internal/output/`):
-    - Text mode: colors via lipgloss, icons, tables (go-pretty)
-    - JSON mode: stable schema, versioned
-    - Exit codes centralized (§13.10)
-    - Error format: `✗ Error: ... Hint: ... Docs: ...`
-
-16. **Shell completion** (`cmd/completion.go`):
-    - Cobra native support for bash/zsh/fish
-    - Dynamic completion for team names (from local teams.yaml), epic IDs (from local meta-repo cache)
-
-17. **Build + release pipeline**:
-    - `.github/workflows/cli-release.yml` using goreleaser
-    - Matrix: darwin-arm64, darwin-amd64, linux-arm64, linux-amd64, windows-amd64
-    - Sign with cosign (optional, defer if complex)
-    - Release artifacts to GitHub Releases
-    - Homebrew tap (optional Phase 1.1)
+14. **Dogfood check**:
+    - Run `vibeflow lint docs/PRD-vibeflow-mvp.md` — must pass
+    - Run `vibeflow init test-demo` — must produce valid repo
+    - If either fails, fix before merging
 
 ## Todo List
 
-- [ ] Scaffold `cli/` Go module + cobra root
-- [ ] Embed templates + schemas via go:embed
-- [ ] Config system with precedence chain
-- [ ] Workspace detection (walk-up to meta-repo)
-- [ ] Template rendering engine (text/template + custom funcs)
-- [ ] Schema validation wrapper
-- [ ] Lint engine (frontmatter + sections + rules)
+- [ ] Go module bootstrap + deps
+- [ ] Embed schemas + templates via go:embed
+- [ ] Schema validator package
+- [ ] Workspace detection package
+- [ ] teams.yaml read/write (comment-preserving)
+- [ ] Template renderer with safe funcs
+- [ ] Lint engine: frontmatter parser
+- [ ] Lint engine: section extractor
+- [ ] Lint engine: metrics table parser
+- [ ] Lint engine: rule runner
 - [ ] `init` command end-to-end
-- [ ] `workspace init` command
-- [ ] `link` command (adopt existing)
-- [ ] `lint` command with `--fix`
-- [ ] `agents` subcommands
-- [ ] `doctor` command
-- [ ] `claude setup` command
-- [ ] `login/logout/whoami` stubs
-- [ ] `config` subcommands
-- [ ] Output system (text/json)
-- [ ] Shell completion
-- [ ] GoReleaser config + CI release pipeline
-- [ ] Cross-platform smoke test (macOS, Linux, Windows)
-- [ ] README + docs for each command
+- [ ] `link` command end-to-end
+- [ ] `lint` command with all formats
+- [ ] `claude setup` command (settings.json read/merge/write)
+- [ ] Output system (text/JSON + exit codes)
+- [ ] Unit tests for all internal packages
+- [ ] Integration test: init → lint → link
+- [ ] Integration test: claude setup
+- [ ] `.goreleaser.yml` cross-compile config
+- [ ] GitHub Actions release workflow
+- [ ] CI matrix test on macOS + Linux + Windows
+- [ ] Dogfood: `vibeflow lint docs/PRD-vibeflow-mvp.md` passes
+- [ ] README with install + quickstart
 
 ## Success Criteria
 
-- `vibeflow init test-repo --kind code --template service --yes` produces a working repo in <2s
-- `vibeflow lint docs/PRD.md` catches missing required sections with specific errors
-- `vibeflow lint --fix` repairs trivial issues without breaking formatting
-- `vibeflow workspace init my-dept` scaffolds a meta-repo skeleton
-- `vibeflow agents sync` updates `.claude/agents/` from local meta-repo
-- `vibeflow doctor` reports all green on a fresh setup
-- Binary <20 MB, starts in <100ms
-- CI builds + tests on 3 OS, releases pinned artifacts
-- All commands support `--json` output
+- `vibeflow init demo --yes` produces a working repo in <2s
+- `vibeflow lint docs/PRD.md` catches missing sections with specific errors, exit 7
+- `vibeflow link` registers repo in `teams.yaml` idempotently
+- `vibeflow claude setup` writes valid MCP entry to `~/.claude/settings.json` without clobbering other entries
+- Binary <20 MB, starts <100ms on macOS M1
+- All 5 platform builds pass CI
+- `vibeflow lint` runs clean on `docs/PRD-vibeflow-mvp.md` (dogfood)
+- Release v0.1.0 published to GitHub Releases
 
 ## Risks
 
 | Risk | Mitigation |
 |---|---|
-| Template rendering edge cases (special chars, markdown vs Go template conflict) | Unit tests with adversarial inputs, use `{{/* */}}` escapes |
-| go:embed binary bloat | Measure, strip unused templates, acceptable up to ~30MB |
-| Schema validation error messages unclear | Test with sample invalid inputs, tune error formatting |
-| Git ops via go-git buggy vs shellout | Start shellout (simpler), migrate later if needed |
-| Interactive prompts conflict with `--yes` | Unit test both paths, CI runs non-interactive |
-| Windows path handling bugs | CI matrix test from day 1 |
-| Cobra fuzzy matching false positives | Use Levenshtein threshold, show top-3 suggestions |
-| Auth stub leaks into production | Separate package boundary, Phase 4 swaps cleanly |
+| `go:embed` binary bloat | Measure, strip unused, target <20 MB |
+| YAML comment preservation tricky | Use `goccy/go-yaml` (not yaml.v3), test thoroughly |
+| Windows path handling bugs | CI matrix from day 1, use `filepath` package correctly |
+| Cobra help formatting inconsistencies | Customize help template minimally |
+| Template injection via `project_name` | Strict regex at flag parse, not at render |
+| `claude setup` clobbers other MCP entries | Read-merge-write pattern with JSON preservation |
+| Git shellout fails (git not installed) | Error with clear hint "install git from https://git-scm.com" |
 
 ## Security Considerations
 
-- `~/.config/vibeflow/token.json` mode 600
-- No telemetry MVP (opt-in Phase 2+ if needed)
-- `vibeflow init --dry-run` never writes or commits
-- Schema validation before any file write (defensive)
-- CODEOWNERS file generated in repo templates (Phase 4 activates enforcement)
-- Signed release binaries (cosign, if time permits)
+- Template variables validated via strict regex BEFORE render
+- Git commit message passed via `-F` with temp file, not inline
+- `.gitignore` template excludes `.env*`, `*.pem`, `*.key`, `token.json`
+- `~/.claude/settings.json` written with mode 600
+- No network calls at runtime (all assets embedded)
+- Path traversal defense: refuse `init` names containing `..`, `/`, `\`
 
 ## Next Steps
 
-- Phase 2 (MCP server) starts once CLI can produce valid product repos + meta-repos
-- Phase 2 reuses schemas (copy or cross-ref)
-- Phase 4 swaps stub auth with real OIDC
+- Phase 2 (MCP stdio server) reuses `cli/internal/schema/` and `cli/internal/workspace/` packages
+- Phase 2 is a separate binary OR subcommand `vibeflow mcp-server` — decision at Phase 2 start
