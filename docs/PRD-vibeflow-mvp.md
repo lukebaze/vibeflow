@@ -1,6 +1,6 @@
 ---
 id: PRD-vibeflow-mvp
-title: Vibeflow MVP — Minimal Cross-Repo Context for Claude Code
+title: Vibeflow — Enterprise Dev Team Workflow Super-Repo
 status: draft
 owner: hieuho
 reviewers: []
@@ -8,179 +8,268 @@ target_quarter: Q2-2026
 repo: vibeflow
 schema_version: "1.0"
 created: 2026-04-14
-updated: 2026-04-14
-tags: [mvp, ai-workflow, claude-code, minimal]
+updated: 2026-04-15
+tags: [mvp, super-repo, claude-code, enterprise-dev]
 ---
 
-# Vibeflow MVP — Minimal Cross-Repo Context for Claude Code
+# Vibeflow — Enterprise Dev Team Workflow Super-Repo
 
-> **Schema note**: This PRD dogfoods Vibeflow's own standards (defined in `standards/schemas/prd-frontmatter.schema.json`). Required sections below enforced by `vibeflow lint`.
+> **Pivot note**: This PRD replaces the earlier Go CLI + MCP server plan (archived in `plans/archived/`). After discovering `cxzharry/avengers-team`, the team pivoted to a super-repo pattern that ships the same value in 1-2 days instead of 2 weeks. Inspiration credited in README.
 
 ## Problem
 
-Enterprise dev teams using Claude Code lose productivity because each session starts without knowledge of sibling repos, past decisions, or team conventions. Devs spend 30-60 min re-explaining context to Claude every morning. PRDs and specs drift across repos (different formats, different locations), so Claude can't learn them systematically. Cross-team features (auth used by mobile + web + API) force devs to manually juggle 3+ codebases to give Claude the full picture.
+Enterprise dev teams using Claude Code lose productivity because each session starts without knowledge of team conventions, cross-repo patterns, or standardized workflows. Different devs write PRDs/specs/ADRs in different formats. Agents, skills, and slash commands drift per-repo. Code review depth varies. When a new project starts, there's no opinionated workflow — every team member freestyles.
 
-Existing tools (Confluence, Notion, Jira) store knowledge in places Claude can't read, forcing copy-paste. Existing Claude Code setups are per-repo isolates.
+**Core pain**: Teams lack a shared, opinionated, versioned source of truth for *how* to use Claude Code across their projects.
 
-**Core pain** (from brainstorm §1): Claude Code at repo A doesn't know what repo B knows.
+Existing attempts (internal wiki, shared Notion pages, copy-paste) fail because: (a) Claude Code can't read them natively, (b) they drift from actual practice, (c) no single command produces a consistent deliverable.
 
 ## Users
 
-- **Primary**: Senior developers at a 3-10 person product team using Claude Code daily across 2-5 related repos (web app + API + shared libs). They want Claude to "know our stack" without re-briefing every session.
-- **Secondary**: Team lead who wants devs to work from the same PRD/spec format so AI output is consistent.
+- **Primary**: Lead developer or engineering manager setting up workflow standards for a 3-10 person dev team in an enterprise org. They want one place to codify "how we use Claude Code here".
+- **Secondary**: Individual developers on that team who want to start new projects with a known-good scaffolding and run opinionated slash commands instead of freestyling.
 
-**Not in MVP**: Designers, PMs, marketing, research roles. Non-dev track deferred to future Phase 5+.
+**Not in MVP**: Consumer AI teams (avengers-team serves this niche), non-dev roles (designer, PM, marketing, research). Vibeflow is dev-first.
 
 ## Success Metrics
 
 | Metric | Baseline | Target | Measurement |
 |---|---|---|---|
-| time_to_claude_context | 15-30 min/session | < 30 sec | Self-reported: "time from `claude` to first productive prompt" |
-| cross_repo_questions_answered | 0 | 80% | Count of user queries where Claude references sibling repo correctly (manual audit, 1 week sample) |
-| prd_consistency | ~30% | 100% | % of PRDs passing `vibeflow lint` in adopted repos |
-| devs_using_vibeflow | 0 | 3-5 | Active install count after 2 weeks |
+| time_to_first_deliverable | 30-60 min freestyle | < 10 min via `/vf-prd` | Self-reported: time from "git clone + init" to valid PRD written |
+| prd_consistency | ~30% (freestyle) | 100% | % of PRDs passing `vf-lint.sh` after init |
+| slash_command_adoption | 0 | ≥ 80% | % of Claude Code sessions in Vibeflow projects that invoke at least one `/vf-*` command |
+| onboarding_time | 15-30 min | < 5 min | git clone → first successful slash command execution |
+| teams_adopting | 0 | 3 | # of teams using Vibeflow after 2 weeks |
 
-## Scope (MINIMAL MVP — ~2 weeks solo)
+## Scope (Super-Repo MVP — ~2 days)
 
-> **Aggressive cut from original plan**: 5-7w plan → **~2w MVP**. Remove all infra. Zero server, zero database, zero auth, zero dashboard, zero write path.
+**This repo IS the product.** No binary, no server, no compile step. Users `git clone` Vibeflow, run `./scripts/vf-init.sh <project>`, and get a scaffolded project with Vibeflow's agents/skills/commands pre-loaded.
 
-**Inclusions**:
+### Inclusions
 
-1. **Go CLI** (single binary, 3 commands):
-   - `vibeflow init <name>` — scaffold new repo with `.vibeflow.yaml`, `.claude/CLAUDE.md`, `docs/PRD.md`, `docs/specs/`, `docs/wiki/` structure. 1 embedded template (generic `code` kind).
-   - `vibeflow link` — register current repo into a workspace by appending to `<workspace>/teams.yaml`.
-   - `vibeflow lint [path]` — validate PRD/spec frontmatter + required sections against embedded JSON schemas. Exit 1 on error for pre-commit hook.
-   - Plus trivial: `version`, `help`.
+1. **`.claude/` directory** (vendored, self-contained):
+   - `agents/` — 7 curated Vibeflow-specific agents: `planner`, `code-reviewer`, `debugger`, `tester`, `researcher`, `docs-manager`, `fullstack-developer`
+   - `skills/` — 6 skills: `karpathy-guidelines`, `plan`, `brainstorm`, `code-review`, `adversarial-dev`, `wiki`
+   - `commands/` — 8 slash commands (all prefix `/vf-*`)
 
-2. **Standards + schemas** (shipped embedded in CLI binary via `go:embed`):
-   - `prd-frontmatter.schema.json` (v1.0)
-   - `spec-frontmatter.schema.json` (v1.0)
-   - `teams.yaml.schema.json` (v1.0)
-   - PRD template (required sections: Problem, Users, Success Metrics, Scope, Non-Goals)
-   - Spec template (Overview, API, Data Models, Edge Cases)
-   - Single code project template
+2. **Slash commands** (all markdown, read natively by Claude Code):
+   - `/vf-prd <product>` — interview + fill PRD template
+   - `/vf-spec <feature>` — interview + fill spec template
+   - `/vf-adr <decision>` — record architecture decision
+   - `/vf-plan <prd-path>` — break PRD into implementation phases
+   - `/vf-review` — review pending code + docs changes
+   - `/vf-wiki <query>` — search wiki (native grep)
+   - `/vf-learn <source>` — ingest new knowledge into wiki
+   - `/vf-init-project <name>` — scaffold new project (shells out to `vf-init.sh`)
 
-3. **Local MCP stdio server** (Node/TS, single file ~300 LOC):
-   - Spawned by Claude Code as subprocess via `~/.claude/settings.json` `mcpServers.vibeflow.command = "vibeflow-mcp"`
-   - Reads directly from filesystem (no Postgres, no cache, no clone daemon)
-   - Workspace discovered via env var `VIBEFLOW_WORKSPACE=/path/to/meta-repo`
-   - 3 tools:
-     - `workspace_context(repo)` — reads `.vibeflow.yaml`, resolves team + linked epics, returns project metadata
-     - `wiki_search(query, scope)` — grep over `wiki/**/*.md` + PRD/spec files in all linked repos (no FTS, no embeddings — just ripgrep)
-     - `list_projects()` — reads `workspace/teams.yaml`, returns all linked repos with owners
-   - Stateless. Reads files on every call. At 5 repos × 100 wiki files grep is < 200ms.
+3. **Bash scripts** (~150 LOC total):
+   - `vf-init.sh` — `cp -r .claude/ templates/ CLAUDE.md <project>` + `mkdir -p` scaffolding + `git init`
+   - `vf-sync.sh` — `diff -rq` report from master super-repo to local project, no overwrite
+   - `vf-lint.sh` — bash + grep/sed frontmatter and required-section validation
 
-4. **Meta-repo convention** (documented, not enforced by code):
-   - `<workspace>/teams.yaml` (team → member → repo list)
-   - `<workspace>/epics/*.md` (optional, flat markdown files)
-   - `<workspace>/wiki/` (optional, markdown tree)
-   - No `.vibeflow/config.yaml`, no standards overrides, no plugins
-   - User creates workspace git repo manually, commits teams.yaml, shares the path via env var
+4. **Templates** (plain markdown, copied by `vf-init.sh`):
+   - `templates/prd.md` — 1-2 page enterprise PRD (Problem, Users, Success Metrics, Scope, Non-Goals, Dependencies, Open Questions)
+   - `templates/spec.md` — technical spec (Overview, API Contracts, Data Models, Edge Cases, Testing Strategy, Security Considerations)
+   - `templates/adr.md` — Michael Nygard-style ADR (Status, Context, Decision, Consequences)
+   - `templates/project-starter/` — base project scaffold (README.md, CLAUDE.md, docs/, plans/)
 
-## Non-Goals (defer to future phases)
+5. **Wiki** (plain markdown, read via native grep or `/vf-wiki`):
+   - `wiki/patterns/` — 5 seeded patterns: `1-page-prd-pattern.md`, `adr-pattern.md`, `cross-repo-convention.md`, `code-review-rubric.md`, `dogfood-ethos.md`
+   - `wiki/domain/` — placeholder for enterprise dev domain knowledge
+   - `wiki/examples/` — placeholder for worked examples
+   - `wiki/retros/` — placeholder for project retrospectives
 
-- ❌ Central self-hosted server (MCP HTTP/SSE transport, Docker Compose, Postgres, Redis, Minio, Keycloak)
-- ❌ Git sync daemon (polling, webhooks, circuit breakers, worker pool)
-- ❌ Write path (no MCP write tools, no PR creation, no `write_queue`)
-- ❌ RBAC / OIDC / teams.yaml enforcement / audit log
-- ❌ Dashboard (no Next.js, no HTML admin pages — users read files in editor)
-- ❌ Kanban board (`plans/kanban.yaml` optional, not rendered by tool)
-- ❌ Semantic search / embeddings / Gemini / pgvector / BullMQ
-- ❌ Agent Distribution Service / auto-PRs / branch protection enforcement
-- ❌ 4 project templates (ship 1 generic)
-- ❌ Multi-kind data model (only `kind: code` exists; `product`/`design` defer to Phase 5)
-- ❌ Non-dev roles (design, product strategy, marketing, research)
-- ❌ Web editor for non-devs
-- ❌ Plugin/override model for standards
-- ❌ Contractor / temp-access / impersonate / offboard flows
-- ❌ Progressive lint enforcement modes (just advisory for MVP, block in git hook if user wants)
-- ❌ Agent/skill distribution (users copy agents manually, or skip)
-- ❌ Figma integration, binary asset handling, review workflow
-- ❌ Two-tier kanban (workspace epic + per-repo task) — user writes flat markdown
-- ❌ Shell completion, `vibeflow doctor`, `vibeflow config`, `vibeflow workspace init`
-- ❌ `--json` mode everywhere (only on `lint`)
-- ❌ Stub OIDC auth (CLI requires zero auth)
-- ❌ Backup/restore, monitoring, Prometheus metrics
+6. **`CLAUDE.md`** — workflow routing table auto-loaded by Claude Code in every session. Maps "I want to X" to the right `/vf-*` command.
+
+7. **Reference docs in `docs/`**:
+   - `docs/PRD-vibeflow-mvp.md` (this file)
+   - `docs/specs/spec-standards.md` (schema + template reference, NOT enforced by tooling)
+   - `docs/journals/` (session journals)
+
+### Non-Goals
+
+**Explicitly NOT in MVP** (many of these were in the earlier Go plan — now archived):
+
+- ❌ Go CLI binary
+- ❌ Node.js / TypeScript runtime
+- ❌ Custom MCP server (Claude Code native `.claude/` is sufficient)
+- ❌ JSON Schema validator (bash `grep`/`sed` is enough for MVP)
+- ❌ Postgres / pgvector / embeddings / semantic search
+- ❌ Docker Compose / Keycloak / OIDC / RBAC / audit log
+- ❌ Central self-hosted server
+- ❌ Git sync daemon (users run `vf-sync.sh` manually)
+- ❌ Dashboard / web UI / write path via PR
+- ❌ GitHub App / branch protection enforcement
+- ❌ Agent Distribution Service
+- ❌ Binary distribution (Homebrew, releases, cross-compile matrix)
+- ❌ `go:embed` template system
+- ❌ Multi-kind data model (only dev projects; no product/design tracks)
+- ❌ Non-dev roles (PO workflow → avengers-team niche; designer/PM → defer)
+- ❌ Cross-repo live query (self-contained per project model)
+- ❌ Progressive lint enforcement modes (just advisory)
 
 ## User Flows
 
-1. **First-time setup** (5 min):
-   - `brew install lukebaze/tap/vibeflow`
-   - `git clone <workspace-repo> ~/work/meta-repo` (or create fresh: `mkdir && git init && echo "teams: {}" > teams.yaml`)
-   - `export VIBEFLOW_WORKSPACE=~/work/meta-repo`
-   - `vibeflow claude setup` → writes to `~/.claude/settings.json`
+### 1. First-time setup (2 min)
+```bash
+git clone https://github.com/lukebaze/vibeflow.git ~/vibeflow
+# That's it. No install, no binary, no runtime.
+```
 
-2. **New repo** (30 sec):
-   - `vibeflow init my-service` → scaffolds repo
-   - `cd my-service && vibeflow link` → registers in `teams.yaml` locally (user commits + pushes manually)
+### 2. New project (1 min)
+```bash
+~/vibeflow/scripts/vf-init.sh my-service
+cd my-service
+# Claude Code auto-loads .claude/ on next session
+```
 
-3. **Daily work** (10 sec):
-   - `cd my-service && claude`
-   - Claude Code auto-calls `workspace_context("my-service")` via MCP
-   - Returns: team, linked repos, epic (if any), PRD status
-   - User asks cross-repo question → Claude calls `wiki_search("auth flow")` → grep returns chunks from sibling repos
-   - Zero setup per session
+### 3. Write a PRD (<10 min)
+```bash
+cd my-service
+# In Claude Code:
+/vf-prd my-service
+# Interview-driven: 5 questions, Claude fills template, saves to docs/PRD.md
+```
 
-4. **PRD lint** (2 sec):
-   - `vibeflow lint docs/PRD.md`
-   - Exit 0 + "✓ valid" or exit 1 + specific errors
-   - User installs as pre-commit hook manually (documented, not auto-installed)
+### 4. Break PRD into plan (<5 min)
+```bash
+/vf-plan docs/PRD.md
+# planner agent reads PRD, produces plans/<slug>/plan.md + phase files
+```
+
+### 5. Record architecture decision (<5 min)
+```bash
+/vf-adr "choose Postgres over MongoDB"
+# Interview + fill docs/adr/ADR-NNN-postgres-vs-mongo.md
+```
+
+### 6. Code review before commit (<5 min)
+```bash
+/vf-review
+# code-reviewer agent reviews pending changes via git diff, applies rubric from wiki/patterns/
+```
+
+### 7. Sync updates from master Vibeflow (manual, weekly)
+```bash
+~/vibeflow/scripts/vf-sync.sh
+# Diff-only report. User copies files they want, skips rest.
+```
 
 ## Dependencies
 
-- Go 1.22+ for CLI build
-- Node 20+ for MCP stdio server (or: implement MCP server in Go to avoid Node dependency entirely — see Open Questions)
-- `ripgrep` for wiki_search (fall back to Go native if not available)
-- User must have Claude Code installed with MCP support
-- GitHub / GitLab / Bitbucket — any git host (workspace is just a git repo)
+- **Git** (for clone + init + sync)
+- **Bash** (for scripts — macOS/Linux native, Windows via WSL or Git Bash)
+- **Claude Code** (reads `.claude/` natively, executes slash commands)
+- **ripgrep** (optional, speeds up `/vf-wiki` grep — falls back to native `grep`)
 
-**No external services required**. No API keys. No database. No cloud deps.
+**No external services required**. No API keys. No database. No cloud deps. Works offline.
+
+## Architecture Rationale
+
+### Why super-repo over custom tooling?
+
+After discovering `cxzharry/avengers-team` (2026-04-14), we realized Claude Code's native `.claude/` auto-loading + slash commands ALREADY solve the workflow standardization problem. Building a Go CLI + MCP server to do the same thing was ~20x more work for the same value.
+
+### Why `cp -r` instead of template engine?
+
+Template variable substitution adds complexity (Go templates, injection defense, schema validation) for little value. The only variable that matters is project name, which can be a simple `sed` one-liner in the init script. YAGNI.
+
+### Why bash scripts instead of a compiled binary?
+
+- Zero install: `git clone` is already standard dev workflow
+- Zero build: no `go build`, no `npm install`, no `brew install`
+- Zero runtime: bash is everywhere
+- Easy to read/modify: team can contribute changes in their IDE
+- Cross-platform: bash works on macOS/Linux/Windows-WSL
+
+### Why no MCP server?
+
+Claude Code already reads `.claude/` natively. A custom MCP server would provide `workspace_context` and `wiki_search` — but Claude Code's built-in file tools (Read, Grep, Glob) solve these problems without any server.
+
+### Why enterprise dev (vs avengers-team's consumer AI)?
+
+- avengers-team targets PO/Designer/Dev on Consumer AI team with Next.js + Cloudflare default
+- Vibeflow targets dev teams in larger orgs with stack-agnostic, ADR-heavy, review-discipline workflows
+- Different audience, same pattern. Not a competitor — a sibling project with different positioning.
 
 ## Open Questions
 
-- [ ] **CLI + MCP server both in Go, or CLI-Go + MCP-Node?** Go-only means 1 binary to ship + 0 Node dependency. Node has better MCP SDK. **Decision: try Go-only with minimal MCP impl (~200 LOC); fallback Node if SDK complexity blocks.**
-- [ ] **Schema versioning strategy for v1.1+?** Accept `enum: ["1.0", "1.1"]` or single version per binary release?
-- [ ] **Workspace discovery UX**: env var + CLI flag, or `.vibeflow` file upward search? Env var simpler for MVP.
-- [ ] **`list_projects` needed or covered by `workspace_context`?** Probably drop `list_projects` — 2 tools total.
-- [ ] **Linting severity config**: hardcode rules or read from `.vibeflow.yaml`? Hardcode for MVP.
-- [ ] **How do users share workspace meta-repo path?** Env var / shell profile / `.envrc`. Not auto-detected. Document in README.
-- [ ] **What about `plans/tasks/*.yaml`?** Optional in MVP. If user creates them, lint validates. No kanban rendering.
-- [ ] **Does Claude Code spawn stdio MCP server correctly cross-platform (Windows especially)?** Needs spike validation before building.
+- [ ] Which 7 agents should we write fresh? Tentative: planner, code-reviewer, debugger, tester, researcher, docs-manager, fullstack-developer
+- [ ] Vendor `karpathy-guidelines` skill or rewrite Vibeflow-specific principles?
+- [ ] ADR template: Nygard-lite (4 fields) or enterprise (with risks, alternatives, rollback)?
+- [ ] Should `/vf-review` include security-mindset auto-activation for auth/crypto/secrets code?
+- [ ] Cross-repo wiki access pattern: document symlink approach in `wiki/patterns/cross-repo-convention.md`?
+- [ ] Does "dev team" include QA/SRE/security? Start with Dev + Tester, defer others to Phase 2.
+- [ ] Vendor skills in-repo or reference global `~/.claude/skills/`? Vendor for self-containment.
 
 ## Rollout
 
-- **Week 1**: Build Phase 0 (schemas) + CLI `init`/`lint` + stdio MCP server
-- **Week 2**: Build `link`, `claude setup`, polish, 1 real repo dogfood test, write README
-- **Week 3+ (post-MVP)**: Only if real users hit real pain → add caching, HTTP transport, write path, RBAC. NOT before.
+### Day 1 (~4-6 hours)
+- [ ] Write `CLAUDE.md` routing table
+- [ ] Write 8 slash commands (`.claude/commands/vf-*.md`)
+- [ ] Write 3 bash scripts (`scripts/vf-init.sh`, `vf-sync.sh`, `vf-lint.sh`)
+- [ ] Write 4 templates (`templates/prd.md`, `spec.md`, `adr.md`, `project-starter/`)
+- [ ] Write 7 Vibeflow-specific agents (`.claude/agents/*.md`)
+- [ ] Vendor 6 skills (`.claude/skills/*`)
 
-**Ship criterion**: dogfood on `vibeflow` repo itself. If I can't use Vibeflow to develop Vibeflow, ship is blocked.
+### Day 2 (~4-6 hours)
+- [ ] Seed 5 wiki patterns
+- [ ] Write `README.md` with quickstart + credit to avengers-team
+- [ ] Dogfood: run `./scripts/vf-init.sh test-project` end-to-end
+- [ ] Fix anything that breaks
+- [ ] Git tag `v0.1.0`
+- [ ] Push to `github.com/lukebaze/vibeflow`
 
-## Red Team Notes
+**Total**: **1-2 days solo**, ~half a day with a helper.
 
-This PRD replaces the 5-phase plan (5-7w) with a 2w minimal scope. The original plan remains in `plans/260414-1411-vibeflow-mvp-implementation/` as a reference "full vision" for Phase 3+ when real demand appears.
+## Ship Criterion
 
-**Trade-offs accepted**:
-- No server = no multi-user realtime state (OK: each dev runs their own stdio MCP locally)
-- No Postgres = no FTS ranking, no semantic search (OK: ripgrep over 5-10 repos is fast enough)
-- No RBAC = anyone with filesystem access reads everything (OK: git repo perms = workspace perms)
-- No write path = Claude can read but not mutate state (OK: user commits manually, which is fine for a 3-5 person team)
-- No dashboard = no lead visibility (OK: lead uses same Claude Code + CLI as devs; fancy UI isn't worth 2 weeks)
+**"If I can't use Vibeflow to develop Vibeflow, ship is blocked."**
 
-**What survives from original plan**:
-- Standards (PRD/spec schemas) — core value
-- CLI init/lint — core value
-- MCP tool API contract — core value
-- Git-as-truth principle — core value
-- `kind: code` data model — keeps Phase 5 path open
-- Dogfood ethos — core value
+Specifically:
+- `./scripts/vf-init.sh test-project` produces a working scaffold
+- `./scripts/vf-lint.sh docs/PRD.md` passes clean on this PRD
+- `/vf-adr "pivot from Go to super-repo"` produces a valid ADR file
+- `/vf-review` reviews a pending change via `code-reviewer` agent
 
-**What dies**:
-- Phase 2 server architecture (replaced by stdio MCP)
-- Phase 3 dashboard (deleted)
-- Phase 4 write path + RBAC (deleted — user commits manually)
-- Agent Distribution Service (deleted)
-- Bundled Keycloak (deleted — no auth needed)
+## Trade-offs Accepted
+
+- **No compiled binary** → users need `git` and `bash` (acceptable — dev tools users have these)
+- **No schema validator** → bash lint gives weaker error messages than Go JSON Schema (acceptable — errors are still clear)
+- **No MCP server** → no cross-repo live query tool (acceptable — Claude Code native file tools work)
+- **No auto-update** → users run `vf-sync.sh` manually (acceptable — explicit is better than magic)
+- **No Windows native** → requires WSL or Git Bash (acceptable for dev audience)
+
+## What Survives from Archived Go Plan
+
+Still valid as reference material:
+- JSON schemas (moved to `docs/specs/spec-standards.md` as reference, not enforced)
+- PRD/spec section requirements (enforced via bash lint now)
+- Red-team findings (preserved in `plans/archived/.../reports/`)
+- Validation log (preserved in archived plan)
+
+What was wrong in the Go plan:
+- Built a CLI + MCP server to solve a problem Claude Code already solves natively
+- Over-engineered schema validation (bash is enough for MVP)
+- Designed for cross-repo live query (problem that doesn't exist at POC scale)
+- Estimated 2 weeks when 1-2 days does the job
+
+## Credit
+
+Pattern inspired by [`cxzharry/avengers-team`](https://github.com/cxzharry/avengers-team) — a super-repo for Product Consumer AI teams. Vibeflow adopts the same pattern for enterprise dev teams. Explicit credit in README.
+
+## Red Team + Validation History
+
+Preserved in `plans/archived/260414-1411-vibeflow-mvp-go-implementation/`:
+- Original brainstorm (9 deep-dives)
+- Red-team review (15 findings applied)
+- Validation log (8 decisions)
+
+Most findings are now moot because the scope they addressed has been deleted. Key findings that still apply to super-repo:
+- Prompt injection defense → document in slash commands + wiki/patterns
+- ADR mandatory → first-class in new plan
+- Dogfood ethos → preserved as ship criterion
 
 ---
 
-**Next**: Read `docs/specs/spec-cli.md`, `docs/specs/spec-mcp-stdio.md`, `docs/specs/spec-standards.md` for implementation details.
+**Next**: Read `docs/specs/spec-standards.md` for PRD/spec/ADR format reference. `CLAUDE.md` for workflow routing.

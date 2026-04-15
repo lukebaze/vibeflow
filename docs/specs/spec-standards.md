@@ -1,19 +1,31 @@
 ---
 id: SPEC-vibeflow-standards
-title: Vibeflow Standards — PRD/spec schemas + repo conventions
+title: Vibeflow Standards — PRD/spec/ADR reference
 status: draft
 owner: hieuho
 prd: PRD-vibeflow-mvp
 repo: vibeflow
 schema_version: "1.0"
-components: [json-schemas, prd-template, spec-template, vibeflow-yaml, teams-yaml, repo-layout]
+components: [prd-template, spec-template, adr-template, frontmatter-convention]
 ---
 
-# Vibeflow Standards — PRD/spec schemas + repo conventions
+# Vibeflow Standards — PRD/spec/ADR reference
+
+## ⚠ Pivot note (2026-04-15)
+
+Vibeflow pivoted from "Go CLI with embedded JSON schema validator" to "super-repo with bash scripts" (see archived `docs/archived/spec-cli-go.md` and `spec-mcp-stdio-go.md`).
+
+**This document is now a REFERENCE**, not a machine contract.
+- JSON schemas below describe **expected structure** but are NOT enforced by a Go validator.
+- Validation happens via `scripts/vf-lint.sh` — bash + `grep`/`sed` checks frontmatter fields and required section headings.
+- Templates live in `templates/` as plain markdown, copied by `scripts/vf-init.sh`.
+- Users read this doc to understand PRD/spec/ADR format expectations.
+
+Use the JSON schemas below as **documentation of intent**, not as runnable validators.
 
 ## Overview
 
-The machine-readable contracts that CLI + MCP server both validate against. Four JSON schemas (PRD frontmatter, spec frontmatter, `.vibeflow.yaml`, `teams.yaml`), two markdown templates (PRD, spec), and a documented repo layout convention. All embedded in CLI binary via `go:embed`. No separate meta-template repo.
+Reference documentation for Vibeflow's PRD/spec/ADR format expectations. Four structural contracts (PRD frontmatter, spec frontmatter, ADR frontmatter, `.vibeflow.yaml` conventions), plus markdown templates with required sections. All ship as plain files in `templates/`, copied into new projects via `scripts/vf-init.sh`.
 
 ## API Contracts
 
